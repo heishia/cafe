@@ -55,6 +55,19 @@ function encodeNaverCafeArticleForm(data) {
   return form.toString();
 }
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatPlainTextForCafeContent(value) {
+  return escapeHtml(value).replace(/\r\n|\r|\n/g, "<br>");
+}
+
 async function refreshNaverAccessToken() {
   requiredEnv("NAVER_CLIENT_ID", NAVER_CLIENT_ID);
   requiredEnv("NAVER_CLIENT_SECRET", NAVER_CLIENT_SECRET);
@@ -180,7 +193,10 @@ app.post("/post-to-cafe", requireServerApiKey, async (req, res, next) => {
 
     const tokenBody = await refreshNaverAccessToken();
     const articleUrl = `${NAVER_CAFE_API_BASE_URL}/${NAVER_CAFE_CLUB_ID}/menu/${NAVER_CAFE_MENU_ID}/articles`;
-    const articleFormBody = encodeNaverCafeArticleForm({ subject, content });
+    const articleFormBody = encodeNaverCafeArticleForm({
+      subject,
+      content: formatPlainTextForCafeContent(content),
+    });
 
     const articleResponse = await fetch(articleUrl, {
       method: "POST",
