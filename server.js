@@ -1,5 +1,4 @@
 const express = require("express");
-const iconv = require("iconv-lite");
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));
@@ -46,33 +45,8 @@ function requireServerApiKey(req, res, next) {
   return next();
 }
 
-function encodeFormComponentCp949(value) {
-  const bytes = iconv.encode(String(value), "cp949");
-  let encoded = "";
-
-  for (const byte of bytes) {
-    const isAlphaNumeric =
-      (byte >= 0x30 && byte <= 0x39) ||
-      (byte >= 0x41 && byte <= 0x5a) ||
-      (byte >= 0x61 && byte <= 0x7a);
-    const isSafeFormByte = byte === 0x2a || byte === 0x2d || byte === 0x2e || byte === 0x5f;
-
-    if (byte === 0x20) {
-      encoded += "+";
-    } else if (isAlphaNumeric || isSafeFormByte) {
-      encoded += String.fromCharCode(byte);
-    } else {
-      encoded += `%${byte.toString(16).toUpperCase().padStart(2, "0")}`;
-    }
-  }
-
-  return encoded;
-}
-
-function encodeFormCp949(data) {
-  return Object.entries(data)
-    .map(([key, value]) => `${encodeFormComponentCp949(key)}=${encodeFormComponentCp949(value)}`)
-    .join("&");
+function encodeFormUtf8(data) {
+  return new URLSearchParams(data).toString();
 }
 
 async function refreshNaverAccessToken() {
@@ -200,15 +174,15 @@ app.post("/post-to-cafe", requireServerApiKey, async (req, res, next) => {
 
     const tokenBody = await refreshNaverAccessToken();
     const articleUrl = `${NAVER_CAFE_API_BASE_URL}/${NAVER_CAFE_CLUB_ID}/menu/${NAVER_CAFE_MENU_ID}/articles`;
-    const articleFormBody = encodeFormCp949({ subject, content });
+    const articleFormBody = encodeFormUtf8({ subject, content });
 
     const articleResponse = await fetch(articleUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${tokenBody.access_token}`,
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
       },
-      body: Buffer.from(articleFormBody, "ascii"),
+      body: articleFormBody,
     });
     const articleBody = await articleResponse.json();
 
