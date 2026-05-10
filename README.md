@@ -45,7 +45,6 @@ AI_API_KEY=...
 AI_MODEL=gpt-4o-mini
 AI_API_BASE_URL=https://api.openai.com/v1
 NAVER_DRAFT_ACCOUNT=2
-MAX_DAILY_PUBLISHES=3
 PORT=3000
 ```
 
@@ -101,7 +100,6 @@ https://your-railway-domain.up.railway.app/login?account=2
 2. 초안은 `data/drafts.json`에 `pending` 상태로 저장됩니다.
 3. 운영자가 내용을 검토하고 필요하면 수정하면서 승인합니다.
 4. 승인된 초안만 `publish` API로 네이버 카페에 게시됩니다.
-5. `MAX_DAILY_PUBLISHES`로 하루 게시 수를 제한합니다. 기본값은 `3`입니다.
 
 댓글 초안 생성 예시:
 

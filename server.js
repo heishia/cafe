@@ -24,7 +24,6 @@ const {
   AI_MODEL = "gpt-4o-mini",
   DRAFTS_STORE_PATH,
   NAVER_DRAFT_ACCOUNT = "2",
-  MAX_DAILY_PUBLISHES = "3",
   PORT = 3000,
 } = process.env;
 
@@ -41,16 +40,6 @@ function requiredEnv(name, value) {
   if (!value) {
     throw new Error(`${name} 환경변수가 필요합니다.`);
   }
-}
-
-function parsePositiveInt(name, value) {
-  const parsed = Number.parseInt(value, 10);
-
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new Error(`${name}은 1 이상의 정수여야 합니다.`);
-  }
-
-  return parsed;
 }
 
 function createId(prefix) {
@@ -216,32 +205,6 @@ async function updateDraft(id, updater) {
 async function getDraft(id) {
   const drafts = await readDrafts();
   return drafts.find((draft) => draft.id === id) || null;
-}
-
-function isPublishedToday(draft, now = new Date()) {
-  if (!draft.publish?.publishedAt) {
-    return false;
-  }
-
-  const published = new Date(draft.publish.publishedAt);
-
-  return (
-    published.getFullYear() === now.getFullYear() &&
-    published.getMonth() === now.getMonth() &&
-    published.getDate() === now.getDate()
-  );
-}
-
-async function assertDailyPublishLimit() {
-  const limit = parsePositiveInt("MAX_DAILY_PUBLISHES", MAX_DAILY_PUBLISHES);
-  const drafts = await readDrafts();
-  const todayCount = drafts.filter(isPublishedToday).length;
-
-  if (todayCount >= limit) {
-    const error = new Error(`오늘 게시 한도 ${limit}개에 도달했습니다.`);
-    error.status = 429;
-    throw error;
-  }
 }
 
 function normalizeAiBaseUrl(value) {
@@ -782,8 +745,6 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
         message: "승인된 초안만 게시할 수 있습니다.",
       });
     }
-
-    await assertDailyPublishLimit();
 
     const target = {
       ...draft.target,
