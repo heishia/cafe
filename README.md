@@ -40,6 +40,12 @@ NAVER2_REDIRECT_URI=http://localhost:3000/callback
 NAVER2_REFRESH_TOKEN=...
 NAVER2_CAFE_CLUB_ID=31635484
 NAVER2_CAFE_MENU_ID=22
+NAVER3_CLIENT_ID=...
+NAVER3_CLIENT_SECRET=...
+NAVER3_REDIRECT_URI=http://localhost:3000/callback
+NAVER3_REFRESH_TOKEN=...
+NAVER3_CAFE_CLUB_ID=31635484
+NAVER3_CAFE_MENU_ID=22
 NAVER_SERVER_API_KEY=...
 AI_API_KEY=...
 AI_MODEL=gpt-4o-mini
@@ -70,6 +76,12 @@ NAVER2_REDIRECT_URI=https://your-railway-domain.up.railway.app/callback
 NAVER2_REFRESH_TOKEN=...
 NAVER2_CAFE_CLUB_ID=31635484
 NAVER2_CAFE_MENU_ID=22
+NAVER3_CLIENT_ID=...
+NAVER3_CLIENT_SECRET=...
+NAVER3_REDIRECT_URI=https://your-railway-domain.up.railway.app/callback
+NAVER3_REFRESH_TOKEN=...
+NAVER3_CAFE_CLUB_ID=31635484
+NAVER3_CAFE_MENU_ID=22
 NAVER_DRAFT_ACCOUNT=2
 ```
 
@@ -84,13 +96,14 @@ Railway 배포 후 네이버 개발자센터에는 아래처럼 등록합니다.
 https://your-railway-domain.up.railway.app/login
 ```
 
-두 번째 계정의 refresh token을 발급하려면 아래 주소로 접속합니다.
+추가 계정의 refresh token을 발급하려면 `account` 번호를 붙여 접속합니다.
 
 ```text
 https://your-railway-domain.up.railway.app/login?account=2
+https://your-railway-domain.up.railway.app/login?account=3
 ```
 
-로그인 후 `/callback` 응답의 `token.refresh_token` 값을 `NAVER2_REFRESH_TOKEN`에 저장합니다.
+로그인 후 `/callback` 응답의 `token.refresh_token` 값을 계정 번호에 맞는 `NAVER2_REFRESH_TOKEN` 또는 `NAVER3_REFRESH_TOKEN`에 저장합니다.
 
 ## AI Draft Flow
 

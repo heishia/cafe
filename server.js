@@ -12,12 +12,6 @@ const {
   NAVER_REFRESH_TOKEN,
   NAVER_CAFE_CLUB_ID,
   NAVER_CAFE_MENU_ID,
-  NAVER2_CLIENT_ID,
-  NAVER2_CLIENT_SECRET,
-  NAVER2_REDIRECT_URI,
-  NAVER2_REFRESH_TOKEN,
-  NAVER2_CAFE_CLUB_ID,
-  NAVER2_CAFE_MENU_ID,
   NAVER_SERVER_API_KEY,
   AI_API_KEY,
   AI_API_BASE_URL = "https://api.openai.com/v1",
@@ -48,22 +42,30 @@ function createId(prefix) {
 }
 
 function normalizeAccountKey(value) {
-  return value === "2" ? "2" : "default";
+  const key = String(value || "default").trim();
+
+  if (key === "default" || key === "1") {
+    return "default";
+  }
+
+  return /^\d+$/.test(key) ? key : "default";
 }
 
 function getNaverConfig(accountKey = "default") {
   const normalizedAccountKey = normalizeAccountKey(accountKey);
 
-  if (normalizedAccountKey === "2") {
+  if (normalizedAccountKey !== "default") {
+    const envPrefix = `NAVER${normalizedAccountKey}`;
+
     return {
-      accountKey: "2",
-      clientId: NAVER2_CLIENT_ID,
-      clientSecret: NAVER2_CLIENT_SECRET,
-      redirectUri: NAVER2_REDIRECT_URI || NAVER_REDIRECT_URI,
-      refreshToken: NAVER2_REFRESH_TOKEN,
-      cafeClubId: NAVER2_CAFE_CLUB_ID,
-      cafeMenuId: NAVER2_CAFE_MENU_ID,
-      envPrefix: "NAVER2",
+      accountKey: normalizedAccountKey,
+      clientId: process.env[`${envPrefix}_CLIENT_ID`],
+      clientSecret: process.env[`${envPrefix}_CLIENT_SECRET`],
+      redirectUri: process.env[`${envPrefix}_REDIRECT_URI`] || NAVER_REDIRECT_URI,
+      refreshToken: process.env[`${envPrefix}_REFRESH_TOKEN`],
+      cafeClubId: process.env[`${envPrefix}_CAFE_CLUB_ID`],
+      cafeMenuId: process.env[`${envPrefix}_CAFE_MENU_ID`],
+      envPrefix,
     };
   }
 
@@ -89,7 +91,7 @@ function getAccountKeyFromState(state) {
     return "default";
   }
 
-  return state.startsWith("2.") ? "2" : "default";
+  return normalizeAccountKey(state.split(".")[0]);
 }
 
 function requireServerApiKey(req, res, next) {
