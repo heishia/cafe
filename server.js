@@ -506,7 +506,7 @@ app.get("/callback", async (req, res, next) => {
     const tokenResponse = await fetch(tokenUrl);
     const tokenBody = await tokenResponse.json();
 
-    if (!tokenResponse.ok) {
+    if (!tokenResponse.ok || tokenBody.error) {
       return res.status(tokenResponse.status).json({
         ok: false,
         message: "네이버 access token 발급에 실패했습니다.",
