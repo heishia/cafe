@@ -12,11 +12,18 @@ const {
   NAVER_REFRESH_TOKEN,
   NAVER_CAFE_CLUB_ID,
   NAVER_CAFE_MENU_ID,
+  NAVER2_CLIENT_ID,
+  NAVER2_CLIENT_SECRET,
+  NAVER2_REDIRECT_URI,
+  NAVER2_REFRESH_TOKEN,
+  NAVER2_CAFE_CLUB_ID,
+  NAVER2_CAFE_MENU_ID,
   NAVER_SERVER_API_KEY,
   AI_API_KEY,
   AI_API_BASE_URL = "https://api.openai.com/v1",
   AI_MODEL = "gpt-4o-mini",
   DRAFTS_STORE_PATH,
+  NAVER_DRAFT_ACCOUNT = "2",
   MAX_DAILY_PUBLISHES = "3",
   PORT = 3000,
 } = process.env;
@@ -51,8 +58,49 @@ function createId(prefix) {
   return `${prefix}_${Date.now().toString(36)}_${random}`;
 }
 
-function createState() {
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+function normalizeAccountKey(value) {
+  return value === "2" ? "2" : "default";
+}
+
+function getNaverConfig(accountKey = "default") {
+  const normalizedAccountKey = normalizeAccountKey(accountKey);
+
+  if (normalizedAccountKey === "2") {
+    return {
+      accountKey: "2",
+      clientId: NAVER2_CLIENT_ID,
+      clientSecret: NAVER2_CLIENT_SECRET,
+      redirectUri: NAVER2_REDIRECT_URI || NAVER_REDIRECT_URI,
+      refreshToken: NAVER2_REFRESH_TOKEN,
+      cafeClubId: NAVER2_CAFE_CLUB_ID,
+      cafeMenuId: NAVER2_CAFE_MENU_ID,
+      envPrefix: "NAVER2",
+    };
+  }
+
+  return {
+    accountKey: "default",
+    clientId: NAVER_CLIENT_ID,
+    clientSecret: NAVER_CLIENT_SECRET,
+    redirectUri: NAVER_REDIRECT_URI,
+    refreshToken: NAVER_REFRESH_TOKEN,
+    cafeClubId: NAVER_CAFE_CLUB_ID,
+    cafeMenuId: NAVER_CAFE_MENU_ID,
+    envPrefix: "NAVER",
+  };
+}
+
+function createState(accountKey = "default") {
+  const state = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return `${normalizeAccountKey(accountKey)}.${state}`;
+}
+
+function getAccountKeyFromState(state) {
+  if (typeof state !== "string") {
+    return "default";
+  }
+
+  return state.startsWith("2.") ? "2" : "default";
 }
 
 function requireServerApiKey(req, res, next) {
@@ -306,16 +354,18 @@ async function generateAiDraft(type, input) {
   };
 }
 
-async function refreshNaverAccessToken() {
-  requiredEnv("NAVER_CLIENT_ID", NAVER_CLIENT_ID);
-  requiredEnv("NAVER_CLIENT_SECRET", NAVER_CLIENT_SECRET);
-  requiredEnv("NAVER_REFRESH_TOKEN", NAVER_REFRESH_TOKEN);
+async function refreshNaverAccessToken(accountKey = "default") {
+  const config = getNaverConfig(accountKey);
+
+  requiredEnv(`${config.envPrefix}_CLIENT_ID`, config.clientId);
+  requiredEnv(`${config.envPrefix}_CLIENT_SECRET`, config.clientSecret);
+  requiredEnv(`${config.envPrefix}_REFRESH_TOKEN`, config.refreshToken);
 
   const tokenUrl = new URL(NAVER_TOKEN_URL);
   tokenUrl.searchParams.set("grant_type", "refresh_token");
-  tokenUrl.searchParams.set("client_id", NAVER_CLIENT_ID);
-  tokenUrl.searchParams.set("client_secret", NAVER_CLIENT_SECRET);
-  tokenUrl.searchParams.set("refresh_token", NAVER_REFRESH_TOKEN);
+  tokenUrl.searchParams.set("client_id", config.clientId);
+  tokenUrl.searchParams.set("client_secret", config.clientSecret);
+  tokenUrl.searchParams.set("refresh_token", config.refreshToken);
 
   const tokenResponse = await fetch(tokenUrl);
   const tokenBody = await tokenResponse.json();
@@ -328,14 +378,15 @@ async function refreshNaverAccessToken() {
   return tokenBody;
 }
 
-async function postCafeArticle({ subject, content, clubId, menuId }) {
-  const targetClubId = clubId || NAVER_CAFE_CLUB_ID;
-  const targetMenuId = menuId || NAVER_CAFE_MENU_ID;
+async function postCafeArticle({ subject, content, clubId, menuId, accountKey = "default" }) {
+  const config = getNaverConfig(accountKey);
+  const targetClubId = clubId || config.cafeClubId;
+  const targetMenuId = menuId || config.cafeMenuId;
 
-  requiredEnv("NAVER_CAFE_CLUB_ID", targetClubId);
-  requiredEnv("NAVER_CAFE_MENU_ID", targetMenuId);
+  requiredEnv(`${config.envPrefix}_CAFE_CLUB_ID`, targetClubId);
+  requiredEnv(`${config.envPrefix}_CAFE_MENU_ID`, targetMenuId);
 
-  const tokenBody = await refreshNaverAccessToken();
+  const tokenBody = await refreshNaverAccessToken(config.accountKey);
   const articleUrl = `${NAVER_CAFE_API_BASE_URL}/${targetClubId}/menu/${targetMenuId}/articles`;
   const articleFormBody = encodeNaverCafeArticleForm({
     subject,
@@ -362,15 +413,16 @@ async function postCafeArticle({ subject, content, clubId, menuId }) {
   return articleBody;
 }
 
-async function postCafeComment({ content, clubId, menuId, articleId }) {
-  const targetClubId = clubId || NAVER_CAFE_CLUB_ID;
-  const targetMenuId = menuId || NAVER_CAFE_MENU_ID;
+async function postCafeComment({ content, clubId, menuId, articleId, accountKey = NAVER_DRAFT_ACCOUNT }) {
+  const config = getNaverConfig(accountKey);
+  const targetClubId = clubId || config.cafeClubId;
+  const targetMenuId = menuId || config.cafeMenuId;
 
-  requiredEnv("NAVER_CAFE_CLUB_ID", targetClubId);
-  requiredEnv("NAVER_CAFE_MENU_ID", targetMenuId);
+  requiredEnv(`${config.envPrefix}_CAFE_CLUB_ID`, targetClubId);
+  requiredEnv(`${config.envPrefix}_CAFE_MENU_ID`, targetMenuId);
   requiredEnv("articleId", articleId);
 
-  const tokenBody = await refreshNaverAccessToken();
+  const tokenBody = await refreshNaverAccessToken(config.accountKey);
   const commentUrl = `${NAVER_CAFE_API_BASE_URL}/${targetClubId}/menu/${targetMenuId}/articles/${articleId}/comments`;
   const commentFormBody = encodeNaverCafeArticleForm({
     content: formatPlainTextForCafeContent(content),
@@ -402,14 +454,16 @@ app.get("/", (req, res) => {
 
 app.get("/login", (req, res, next) => {
   try {
-    requiredEnv("NAVER_CLIENT_ID", NAVER_CLIENT_ID);
-    requiredEnv("NAVER_REDIRECT_URI", NAVER_REDIRECT_URI);
+    const config = getNaverConfig(req.query.account);
+
+    requiredEnv(`${config.envPrefix}_CLIENT_ID`, config.clientId);
+    requiredEnv(`${config.envPrefix}_REDIRECT_URI`, config.redirectUri);
 
     const url = new URL(NAVER_AUTH_URL);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("client_id", NAVER_CLIENT_ID);
-    url.searchParams.set("redirect_uri", NAVER_REDIRECT_URI);
-    url.searchParams.set("state", createState());
+    url.searchParams.set("client_id", config.clientId);
+    url.searchParams.set("redirect_uri", config.redirectUri);
+    url.searchParams.set("state", createState(config.accountKey));
 
     res.redirect(url.toString());
   } catch (error) {
@@ -419,11 +473,12 @@ app.get("/login", (req, res, next) => {
 
 app.get("/callback", async (req, res, next) => {
   try {
-    requiredEnv("NAVER_CLIENT_ID", NAVER_CLIENT_ID);
-    requiredEnv("NAVER_CLIENT_SECRET", NAVER_CLIENT_SECRET);
-    requiredEnv("NAVER_REDIRECT_URI", NAVER_REDIRECT_URI);
-
     const { code, state, error, error_description: errorDescription } = req.query;
+    const config = getNaverConfig(getAccountKeyFromState(state));
+
+    requiredEnv(`${config.envPrefix}_CLIENT_ID`, config.clientId);
+    requiredEnv(`${config.envPrefix}_CLIENT_SECRET`, config.clientSecret);
+    requiredEnv(`${config.envPrefix}_REDIRECT_URI`, config.redirectUri);
 
     if (error) {
       return res.status(400).json({
@@ -443,8 +498,8 @@ app.get("/callback", async (req, res, next) => {
 
     const tokenUrl = new URL(NAVER_TOKEN_URL);
     tokenUrl.searchParams.set("grant_type", "authorization_code");
-    tokenUrl.searchParams.set("client_id", NAVER_CLIENT_ID);
-    tokenUrl.searchParams.set("client_secret", NAVER_CLIENT_SECRET);
+    tokenUrl.searchParams.set("client_id", config.clientId);
+    tokenUrl.searchParams.set("client_secret", config.clientSecret);
     tokenUrl.searchParams.set("code", code);
     tokenUrl.searchParams.set("state", state);
 
@@ -462,6 +517,7 @@ app.get("/callback", async (req, res, next) => {
     return res.json({
       ok: true,
       message: "네이버 access token 발급 성공",
+      account: config.accountKey,
       token: tokenBody,
     });
   } catch (error) {
@@ -471,11 +527,13 @@ app.get("/callback", async (req, res, next) => {
 
 app.get("/refresh", requireServerApiKey, async (req, res, next) => {
   try {
-    const tokenBody = await refreshNaverAccessToken();
+    const config = getNaverConfig(req.query.account);
+    const tokenBody = await refreshNaverAccessToken(config.accountKey);
 
     return res.json({
       ok: true,
       message: "네이버 access token 재발급 성공",
+      account: config.accountKey,
       token: tokenBody,
     });
   } catch (error) {
@@ -537,6 +595,7 @@ app.post("/drafts/comment", requireServerApiKey, async (req, res, next) => {
       articleId,
       clubId,
       menuId,
+      accountKey,
       authorNickname,
       context,
       persona,
@@ -565,6 +624,7 @@ app.post("/drafts/comment", requireServerApiKey, async (req, res, next) => {
         articleId,
         clubId,
         menuId,
+        accountKey: normalizeAccountKey(accountKey || NAVER_DRAFT_ACCOUNT),
       },
       draft: {
         content: aiDraft.content,
@@ -585,7 +645,7 @@ app.post("/drafts/comment", requireServerApiKey, async (req, res, next) => {
 
 app.post("/drafts/article", requireServerApiKey, async (req, res, next) => {
   try {
-    const { topic, notes, clubId, menuId, persona } = req.body || {};
+    const { topic, notes, clubId, menuId, accountKey, persona } = req.body || {};
 
     if (!topic) {
       return res.status(400).json({
@@ -606,6 +666,7 @@ app.post("/drafts/article", requireServerApiKey, async (req, res, next) => {
       target: {
         clubId,
         menuId,
+        accountKey: normalizeAccountKey(accountKey || NAVER_DRAFT_ACCOUNT),
       },
       draft: {
         subject: aiDraft.subject || topic,
@@ -735,12 +796,14 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
             clubId: target.clubId,
             menuId: target.menuId,
             articleId: target.articleId,
+            accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
           })
         : await postCafeArticle({
             subject: draft.draft.subject,
             content: draft.draft.content,
             clubId: target.clubId,
             menuId: target.menuId,
+            accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
           });
     const publishedDraft = await updateDraft(req.params.id, (current, now) => ({
       status: "published",

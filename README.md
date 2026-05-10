@@ -34,15 +34,23 @@ NAVER_REDIRECT_URI=http://localhost:3000/callback
 NAVER_REFRESH_TOKEN=...
 NAVER_CAFE_CLUB_ID=...
 NAVER_CAFE_MENU_ID=...
+NAVER2_CLIENT_ID=...
+NAVER2_CLIENT_SECRET=...
+NAVER2_REDIRECT_URI=http://localhost:3000/callback
+NAVER2_REFRESH_TOKEN=...
+NAVER2_CAFE_CLUB_ID=31635484
+NAVER2_CAFE_MENU_ID=22
 NAVER_SERVER_API_KEY=...
 AI_API_KEY=...
 AI_MODEL=gpt-4o-mini
 AI_API_BASE_URL=https://api.openai.com/v1
+NAVER_DRAFT_ACCOUNT=2
 MAX_DAILY_PUBLISHES=3
 PORT=3000
 ```
 
 `NAVER_SERVER_API_KEY`가 있으면 보호된 API는 `x-api-key` 헤더가 필요합니다.
+AI 초안 승인 게시 흐름은 기본적으로 `NAVER_DRAFT_ACCOUNT=2`에 해당하는 `NAVER2_*` 계정을 사용합니다.
 
 로컬 테스트용 네이버 개발자센터 설정:
 
@@ -57,6 +65,13 @@ Railway에 배포한 뒤 Variables에 아래 값을 등록합니다.
 NAVER_CLIENT_ID=...
 NAVER_CLIENT_SECRET=...
 NAVER_REDIRECT_URI=https://your-railway-domain.up.railway.app/callback
+NAVER2_CLIENT_ID=...
+NAVER2_CLIENT_SECRET=...
+NAVER2_REDIRECT_URI=https://your-railway-domain.up.railway.app/callback
+NAVER2_REFRESH_TOKEN=...
+NAVER2_CAFE_CLUB_ID=31635484
+NAVER2_CAFE_MENU_ID=22
+NAVER_DRAFT_ACCOUNT=2
 ```
 
 Railway 배포 후 네이버 개발자센터에는 아래처럼 등록합니다.
@@ -69,6 +84,14 @@ Railway 배포 후 네이버 개발자센터에는 아래처럼 등록합니다.
 ```text
 https://your-railway-domain.up.railway.app/login
 ```
+
+두 번째 계정의 refresh token을 발급하려면 아래 주소로 접속합니다.
+
+```text
+https://your-railway-domain.up.railway.app/login?account=2
+```
+
+로그인 후 `/callback` 응답의 `token.refresh_token` 값을 `NAVER2_REFRESH_TOKEN`에 저장합니다.
 
 ## AI Draft Flow
 
