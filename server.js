@@ -13,9 +13,6 @@ const {
   NAVER_CAFE_CLUB_ID,
   NAVER_CAFE_MENU_ID,
   NAVER_SERVER_API_KEY,
-  AI_API_KEY,
-  AI_API_BASE_URL = "https://api.openai.com/v1",
-  AI_MODEL = "gpt-4o-mini",
   DRAFTS_STORE_PATH,
   NAVER_DRAFT_ACCOUNT = "2",
   PORT = 3000,
@@ -27,8 +24,6 @@ const NAVER_CAFE_API_BASE_URL = "https://openapi.naver.com/v1/cafe";
 const DRAFTS_FILE_PATH = DRAFTS_STORE_PATH
   ? path.resolve(DRAFTS_STORE_PATH)
   : path.join(__dirname, "data", "drafts.json");
-const DEFAULT_PERSONA =
-  "바이브코딩을 꾸준히 해 온 중급자 수준의 친절한 20대 여성 말투. 과장하지 않고, 실제 경험처럼 단정하지 않으며, 도움 되는 관찰과 질문을 자연스럽게 섞는다.";
 
 function requiredEnv(name, value) {
   if (!value) {
@@ -209,116 +204,6 @@ async function getDraft(id) {
   return drafts.find((draft) => draft.id === id) || null;
 }
 
-function normalizeAiBaseUrl(value) {
-  return value.replace(/\/+$/, "");
-}
-
-function buildDraftPrompt(type, input) {
-  if (type === "comment") {
-    return [
-      "아래 네이버 카페 게시글을 읽고 댓글 초안을 작성해 주세요.",
-      "",
-      `페르소나: ${input.persona || DEFAULT_PERSONA}`,
-      "원칙:",
-      "- 사람을 속이는 자동 활동처럼 보이게 만들지 말고, 사람이 검토할 초안으로 작성합니다.",
-      "- 글쓴이를 존중하고, 홍보/반복/과장 표현을 피합니다.",
-      "- 본인이 직접 겪지 않은 경험은 실제 경험처럼 단정하지 않습니다.",
-      "- 2~5문장 정도의 자연스러운 한국어 댓글로 작성합니다.",
-      "- 필요한 경우 가벼운 질문을 하나만 덧붙입니다.",
-      "",
-      `게시글 제목: ${input.articleTitle || "(제목 없음)"}`,
-      `게시글 본문:\n${input.articleContent}`,
-      input.context ? `추가 맥락:\n${input.context}` : "",
-    ].join("\n");
-  }
-
-  return [
-    "네이버 카페에 올릴 게시글 초안을 작성해 주세요.",
-    "",
-    `페르소나: ${input.persona || DEFAULT_PERSONA}`,
-    "원칙:",
-    "- 사람이 검토한 뒤 게시할 초안으로 작성합니다.",
-    "- 바이브코딩 중급자 관점에서 친절하고 실용적으로 씁니다.",
-    "- 홍보성 문구, 과장, 반복 표현을 피합니다.",
-    "- 제목은 40자 이내, 본문은 700자 이내로 작성합니다.",
-    "",
-    `주제: ${input.topic}`,
-    input.notes ? `포함할 메모:\n${input.notes}` : "",
-  ].join("\n");
-}
-
-function extractJsonObject(text) {
-  const trimmed = text.trim();
-
-  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-    return trimmed;
-  }
-
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-
-  if (start === -1 || end === -1 || end <= start) {
-    throw new Error("AI 응답에서 JSON 객체를 찾지 못했습니다.");
-  }
-
-  return trimmed.slice(start, end + 1);
-}
-
-async function generateAiDraft(type, input) {
-  requiredEnv("AI_API_KEY", AI_API_KEY);
-
-  const response = await fetch(`${normalizeAiBaseUrl(AI_API_BASE_URL)}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${AI_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: AI_MODEL,
-      temperature: 0.7,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "너는 네이버 카페 운영자가 검토할 댓글/게시글 초안을 만드는 한국어 작성 보조 도구다. 반드시 JSON만 반환한다. 형식은 {\"subject\": string|null, \"content\": string, \"safetyNotes\": string[]} 이다.",
-        },
-        {
-          role: "user",
-          content: buildDraftPrompt(type, input),
-        },
-      ],
-    }),
-  });
-  const body = await response.json();
-
-  if (!response.ok) {
-    const message = body.error?.message || "AI 초안 생성에 실패했습니다.";
-    const error = new Error(message);
-    error.status = response.status;
-    throw error;
-  }
-
-  const message = body.choices?.[0]?.message?.content;
-
-  if (!message) {
-    throw new Error("AI 응답에 초안 내용이 없습니다.");
-  }
-
-  const parsed = JSON.parse(extractJsonObject(message));
-
-  if (!parsed.content || typeof parsed.content !== "string") {
-    throw new Error("AI 응답에는 문자열 content가 필요합니다.");
-  }
-
-  return {
-    subject: parsed.subject || null,
-    content: parsed.content.trim(),
-    safetyNotes: Array.isArray(parsed.safetyNotes) ? parsed.safetyNotes : [],
-    model: AI_MODEL,
-  };
-}
-
 async function refreshNaverAccessToken(accountKey = "default") {
   const config = getNaverConfig(accountKey);
 
@@ -341,41 +226,6 @@ async function refreshNaverAccessToken(accountKey = "default") {
   }
 
   return tokenBody;
-}
-
-async function postCafeArticle({ subject, content, clubId, menuId, accountKey = "default" }) {
-  const config = getNaverConfig(accountKey);
-  const targetClubId = clubId || config.cafeClubId;
-  const targetMenuId = menuId || config.cafeMenuId;
-
-  requiredEnv(`${config.envPrefix}_CAFE_CLUB_ID`, targetClubId);
-  requiredEnv(`${config.envPrefix}_CAFE_MENU_ID`, targetMenuId);
-
-  const tokenBody = await refreshNaverAccessToken(config.accountKey);
-  const articleUrl = `${NAVER_CAFE_API_BASE_URL}/${targetClubId}/menu/${targetMenuId}/articles`;
-  const articleFormBody = encodeNaverCafeArticleForm({
-    subject,
-    content: formatPlainTextForCafeContent(content),
-  });
-
-  const articleResponse = await fetch(articleUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${tokenBody.access_token}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: articleFormBody,
-  });
-  const articleBody = await articleResponse.json();
-
-  if (!articleResponse.ok) {
-    const error = new Error("네이버 카페 글쓰기에 실패했습니다.");
-    error.status = articleResponse.status;
-    error.naverResponse = articleBody;
-    throw error;
-  }
-
-  return articleBody;
 }
 
 async function postCafeComment({ content, clubId, menuId, articleId, accountKey = NAVER_DRAFT_ACCOUNT }) {
@@ -563,13 +413,13 @@ app.post("/drafts/comment", requireServerApiKey, async (req, res, next) => {
       accountKey,
       authorNickname,
       context,
-      persona,
+      content,
     } = req.body || {};
 
-    if (!articleContent) {
+    if (!content) {
       return res.status(400).json({
         ok: false,
-        message: "articleContent가 필요합니다.",
+        message: "content가 필요합니다.",
       });
     }
 
@@ -578,9 +428,7 @@ app.post("/drafts/comment", requireServerApiKey, async (req, res, next) => {
       articleContent,
       authorNickname,
       context,
-      persona,
     };
-    const aiDraft = await generateAiDraft("comment", input);
     const draft = await createDraft({
       type: "comment",
       input,
@@ -592,58 +440,13 @@ app.post("/drafts/comment", requireServerApiKey, async (req, res, next) => {
         accountKey: normalizeAccountKey(accountKey || NAVER_DRAFT_ACCOUNT),
       },
       draft: {
-        content: aiDraft.content,
-        safetyNotes: aiDraft.safetyNotes,
-        model: aiDraft.model,
+        content: String(content).trim(),
       },
     });
 
     return res.status(201).json({
       ok: true,
-      message: "댓글 초안이 생성되었습니다. 승인 후 게시할 수 있습니다.",
-      draft,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/drafts/article", requireServerApiKey, async (req, res, next) => {
-  try {
-    const { topic, notes, clubId, menuId, accountKey, persona } = req.body || {};
-
-    if (!topic) {
-      return res.status(400).json({
-        ok: false,
-        message: "topic이 필요합니다.",
-      });
-    }
-
-    const input = {
-      topic,
-      notes,
-      persona,
-    };
-    const aiDraft = await generateAiDraft("article", input);
-    const draft = await createDraft({
-      type: "article",
-      input,
-      target: {
-        clubId,
-        menuId,
-        accountKey: normalizeAccountKey(accountKey || NAVER_DRAFT_ACCOUNT),
-      },
-      draft: {
-        subject: aiDraft.subject || topic,
-        content: aiDraft.content,
-        safetyNotes: aiDraft.safetyNotes,
-        model: aiDraft.model,
-      },
-    });
-
-    return res.status(201).json({
-      ok: true,
-      message: "게시글 초안이 생성되었습니다. 승인 후 게시할 수 있습니다.",
+      message: "댓글 초안이 저장되었습니다. 승인 후 게시할 수 있습니다.",
       draft,
     });
   } catch (error) {
@@ -748,26 +551,24 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
       });
     }
 
+    if (draft.type !== "comment") {
+      return res.status(400).json({
+        ok: false,
+        message: "댓글 초안만 게시할 수 있습니다.",
+      });
+    }
+
     const target = {
       ...draft.target,
       ...(req.body || {}),
     };
-    const naverResponse =
-      draft.type === "comment"
-        ? await postCafeComment({
-            content: draft.draft.content,
-            clubId: target.clubId,
-            menuId: target.menuId,
-            articleId: target.articleId,
-            accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
-          })
-        : await postCafeArticle({
-            subject: draft.draft.subject,
-            content: draft.draft.content,
-            clubId: target.clubId,
-            menuId: target.menuId,
-            accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
-          });
+    const naverResponse = await postCafeComment({
+      content: draft.draft.content,
+      clubId: target.clubId,
+      menuId: target.menuId,
+      articleId: target.articleId,
+      accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
+    });
     const publishedDraft = await updateDraft(req.params.id, (current, now) => ({
       status: "published",
       target,
@@ -781,29 +582,6 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
       ok: true,
       message: "승인된 초안이 네이버 카페에 게시되었습니다.",
       draft: publishedDraft,
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/post-to-cafe", requireServerApiKey, async (req, res, next) => {
-  try {
-    const { subject, content, clubId, menuId } = req.body || {};
-
-    if (!subject || !content) {
-      return res.status(400).json({
-        ok: false,
-        message: "subject와 content가 필요합니다.",
-      });
-    }
-
-    const articleBody = await postCafeArticle({ subject, content, clubId, menuId });
-
-    return res.json({
-      ok: true,
-      message: "네이버 카페 글쓰기 성공",
-      naverResponse: articleBody,
     });
   } catch (error) {
     next(error);
