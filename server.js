@@ -228,6 +228,41 @@ async function refreshNaverAccessToken(accountKey = "default") {
   return tokenBody;
 }
 
+async function postCafeArticle({ subject, content, clubId, menuId, accountKey = "default" }) {
+  const config = getNaverConfig(accountKey);
+  const targetClubId = clubId || config.cafeClubId;
+  const targetMenuId = menuId || config.cafeMenuId;
+
+  requiredEnv(`${config.envPrefix}_CAFE_CLUB_ID`, targetClubId);
+  requiredEnv(`${config.envPrefix}_CAFE_MENU_ID`, targetMenuId);
+
+  const tokenBody = await refreshNaverAccessToken(config.accountKey);
+  const articleUrl = `${NAVER_CAFE_API_BASE_URL}/${targetClubId}/menu/${targetMenuId}/articles`;
+  const articleFormBody = encodeNaverCafeArticleForm({
+    subject,
+    content: formatPlainTextForCafeContent(content),
+  });
+
+  const articleResponse = await fetch(articleUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${tokenBody.access_token}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: articleFormBody,
+  });
+  const articleBody = await articleResponse.json();
+
+  if (!articleResponse.ok) {
+    const error = new Error("네이버 카페 글쓰기에 실패했습니다.");
+    error.status = articleResponse.status;
+    error.naverResponse = articleBody;
+    throw error;
+  }
+
+  return articleBody;
+}
+
 async function postCafeComment({ content, clubId, menuId, articleId, accountKey = NAVER_DRAFT_ACCOUNT }) {
   const config = getNaverConfig(accountKey);
   const targetClubId = clubId || config.cafeClubId;
@@ -551,10 +586,10 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
       });
     }
 
-    if (draft.type !== "comment") {
+    if (draft.type !== "comment" && draft.type !== "article") {
       return res.status(400).json({
         ok: false,
-        message: "댓글 초안만 게시할 수 있습니다.",
+        message: "댓글 또는 게시글 초안만 게시할 수 있습니다.",
       });
     }
 
@@ -562,13 +597,22 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
       ...draft.target,
       ...(req.body || {}),
     };
-    const naverResponse = await postCafeComment({
-      content: draft.draft.content,
-      clubId: target.clubId,
-      menuId: target.menuId,
-      articleId: target.articleId,
-      accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
-    });
+    const naverResponse =
+      draft.type === "comment"
+        ? await postCafeComment({
+            content: draft.draft.content,
+            clubId: target.clubId,
+            menuId: target.menuId,
+            articleId: target.articleId,
+            accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
+          })
+        : await postCafeArticle({
+            subject: draft.draft.subject,
+            content: draft.draft.content,
+            clubId: target.clubId,
+            menuId: target.menuId,
+            accountKey: target.accountKey || NAVER_DRAFT_ACCOUNT,
+          });
     const publishedDraft = await updateDraft(req.params.id, (current, now) => ({
       status: "published",
       target,
@@ -582,6 +626,35 @@ app.post("/drafts/:id/publish", requireServerApiKey, async (req, res, next) => {
       ok: true,
       message: "승인된 초안이 네이버 카페에 게시되었습니다.",
       draft: publishedDraft,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/post-to-cafe", requireServerApiKey, async (req, res, next) => {
+  try {
+    const { subject, content, clubId, menuId, accountKey } = req.body || {};
+
+    if (!subject || !content) {
+      return res.status(400).json({
+        ok: false,
+        message: "subject와 content가 필요합니다.",
+      });
+    }
+
+    const articleBody = await postCafeArticle({
+      subject,
+      content,
+      clubId,
+      menuId,
+      accountKey,
+    });
+
+    return res.json({
+      ok: true,
+      message: "네이버 카페 글쓰기 성공",
+      naverResponse: articleBody,
     });
   } catch (error) {
     next(error);
